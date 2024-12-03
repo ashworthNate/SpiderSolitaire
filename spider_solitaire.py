@@ -3,14 +3,18 @@ Tristen, Nathan
 Spider_solitaire
 12-03-24 - Created File/Started Basic Structure
 """
-
+import random, enum
 
 class card:
+   """Class to define cards and suits"""
    def __init__():
 
 
 class deck:
+   """class to create card decks"""
    def __init__():
 
 class spiderSolitaire:
+   """Class for the game logic of Spider Solotaire"""
    def __init__():
+
