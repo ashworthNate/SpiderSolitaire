@@ -5,6 +5,12 @@ Spider_solitaire
 """
 
 
-class card():
-   def __init__:
-    
+class card:
+   def __init__():
+
+
+class deck:
+   def __init__():
+
+class spiderSolitaire:
+   def __init__():
