@@ -2,6 +2,7 @@
 Tristen, Nathan
 Spider_solitaire
 12-03-24 - Created File/Started Basic Structure
+12-05-24 - (Nathan) Started Work on GUI
 """
 
 import sys
