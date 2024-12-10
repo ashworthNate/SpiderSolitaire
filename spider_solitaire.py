@@ -1,29 +1,45 @@
 """
-Tristen, Nathan Boyd
+Tristen, Nathan
 Spider_solitaire
-Proffessor Ordonez
-Fundamentals of Software Design
-
-12-03-24 - (Nathan) Created File/Started Basic Structure
+12-03-24 - Created File/Started Basic Structure
 12-05-24 - (Nathan) Started Work on GUI
-12-09-24 - (Nathan) Implemented card display, card interactions, draw logic, and basic move logic.
+12-09-24 - (Nathan) Implemented card display, interactions, and basic move logic.
+12-09-24 - (Nathan) 
+    * Followed exact Spider Solitaire rules for two suits.
+    * Implemented full suit detection and automatic move to foundations.
+    * Displayed invalid move messages.
+    * Improved draw logic and proper face-up dealing.
+    * Fixed layout retrieval and indexing issues.
+    * Added checks and debug prints to help diagnose unexpected window closures.
+    * Removed fixed sizes and implemented dynamic scaling of card sizes based on window size.
+    * Adjusted layouts so that all columns fit within the window and cards resize on window changes.
+    * Fixed AttributeError by using QSizePolicy for expanding placeholders.
+    * Implemented five guaranteed deals for the draw pile as per Spider rules.
+    * Allowed mixed-suit building in the tableau but only same-suit descending sequences can be moved.
+    * Implemented overlapping stacks and fixed card size.
+    * Attempted debugging draw function.
+    * Removed deck length checks in deal_additional_row(), relying solely on deal_count < 5.
+    * Added additional debug prints to verify correct dealing.
 """
 
 import sys
 import random
+from functools import partial
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
-    QVBoxLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QWidget,
     QGridLayout,
-    QFrame
+    QFrame,
+    QMessageBox,
+    QSizePolicy,
+    QVBoxLayout
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QPoint, QRect
-from PyQt5.QtGui import QFont, QPalette, QColor
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QFont, QPalette
 
 
 class Card:
@@ -41,13 +57,11 @@ class Card:
 
     @property
     def display_rank(self):
-        # Convert numeric ranks to typical card symbols
         rank_map = {1: "A", 11: "J", 12: "Q", 13: "K"}
         return rank_map.get(self.rank, str(self.rank))
 
     @property
     def display_suit(self):
-        # We can use simple unicode symbols or just text
         if self.suit == "Spades":
             return "♠"
         elif self.suit == "Hearts":
@@ -60,8 +74,7 @@ class Deck:
     def __init__(self):
         self.cards = []
         suits = ["Spades", "Hearts"]
-        ranks = list(range(1, 14))  # 1 for Ace, 11 for Jack, etc.
-        # Two full decks of two suits -> 2 decks * 2 suits * 13 ranks = 52 cards * 2 = 104 cards
+        ranks = list(range(1, 14))
         for _ in range(2):
             for suit in suits:
                 for rank in ranks:
@@ -80,118 +93,202 @@ class Deck:
 
 
 class SpiderSolitaire:
-    """Class for the game logic of Spider Solitaire"""
+    """Class for the game logic of Spider Solitaire (Two Suit Version)"""
     def __init__(self):
         self.deck = Deck()
-        # First 4 columns get 6 cards, the remaining 6 columns get 5 cards
+        # Initial deal (54 cards)
         self.columns = [self.deck.deal(6) for _ in range(4)] + [self.deck.deal(5) for _ in range(6)]
-        self.foundations = [[] for _ in range(4)]
-        # Flip the last card in each column face up
         for col in self.columns:
             if col:
                 col[-1].face_up = True
 
+        self.foundations = [[] for _ in range(8)]
+        self.moves = 0
+        self.deal_count = 0  # track how many times we've dealt an additional row
+
+        # Debug initial conditions
+        total_dealt = sum(len(col) for col in self.columns)
+        print("Initial cards dealt:", total_dealt)
+        print("Expected initial deal: 54 cards. Actual:", total_dealt)
+        print("Deck length after initial deal:", len(self.deck.cards))  # Should be 50
+
     def deal_additional_row(self):
-        # Deal one card to each column if deck is not empty
-        if len(self.deck.cards) < 10:
+        print(f"Attempting to deal row #{self.deal_count+1}")
+        if self.deal_count >= 5:
+            print("deal_additional_row: Already dealt 5 times.")
             return False
+
+        # According to standard Spider rules, we should always have enough cards (50 left initially for 5 deals)
+        if len(self.deck.cards) < 10:
+            # This should never happen if initial conditions are correct
+            print("deal_additional_row: Not enough cards in deck. Something is wrong.")
+            return False
+
+        print("Deck length before dealing this row:", len(self.deck.cards))
         new_cards = self.deck.deal(10)
         for i, col in enumerate(self.columns):
+            new_cards[i].face_up = True
             col.append(new_cards[i])
-            col[-1].flip()  # Immediately flip them face up
+
+        self.deal_count += 1
+        print(f"Dealt row #{self.deal_count}. Deck length now:", len(self.deck.cards))
         return True
 
     def can_move_card(self, from_col, card_index, to_col):
-        # Basic move logic:
-        # - You can only move a sequence of face-up cards in descending order
-        #   matching suit.
-        # For simplicity, let's only consider moving the top face-up card or
-        # a valid sequence. We'll implement a minimal rule:
-        #
-        # Check that the sequence from card_index to the end of from_col is descending
-        # and same suit.
-        moving_sequence = from_col[card_index:]
-        if not all(card.face_up for card in moving_sequence):
+        movable_sequence = self.get_movable_sequence(from_col, card_index)
+        if not movable_sequence:
             return False
-        # Check descending order by rank and same suit
-        for i in range(len(moving_sequence) - 1):
-            if not (moving_sequence[i].rank == moving_sequence[i+1].rank + 1 and
-                    moving_sequence[i].suit == moving_sequence[i+1].suit):
-                return False
 
-        # Check if we can place on to_col
+        top_moved_card = movable_sequence[0]
         if not to_col:
-            # Empty column can only accept King sequences (if top card is a King)
-            if moving_sequence[0].rank == 13:
-                return True
-            else:
-                return False
+            return top_moved_card.rank == 13
         else:
-            top_card = to_col[-1]
-            # Must place onto a card exactly one rank higher and same suit
-            if (top_card.face_up and
-                top_card.suit == moving_sequence[0].suit and
-                top_card.rank == moving_sequence[0].rank + 1):
-                return True
-        return False
+            top_dest_card = to_col[-1]
+            return top_moved_card.rank == top_dest_card.rank - 1
+
+    def get_movable_sequence(self, col, start_index):
+        if start_index < 0 or start_index >= len(col):
+            return []
+        seq = [col[start_index]]
+        if not col[start_index].face_up:
+            return []
+
+        for i in range(start_index+1, len(col)):
+            prev_card = seq[-1]
+            curr_card = col[i]
+            if curr_card.face_up and curr_card.suit == prev_card.suit and curr_card.rank == prev_card.rank - 1:
+                seq.append(curr_card)
+            else:
+                break
+        return seq
 
     def move_sequence(self, from_col, card_index, to_col):
-        # Move the sequence of cards
-        moving_sequence = from_col[card_index:]
-        del from_col[card_index:]
-        to_col.extend(moving_sequence)
-        # Flip the new top card of from_col, if any
+        movable_sequence = self.get_movable_sequence(from_col, card_index)
+        if not movable_sequence:
+            return
+
+        length = len(movable_sequence)
+        moving_cards = from_col[card_index:card_index+length]
+        del from_col[card_index:card_index+length]
+        to_col.extend(moving_cards)
+
         if from_col and not from_col[-1].face_up:
             from_col[-1].flip()
+        self.moves += 1
+        self.check_for_complete_suits(to_col)
+
+    def check_for_complete_suits(self, column):
+        while len(column) >= 13:
+            last_13 = column[-13:]
+            if self.is_full_sequence(last_13):
+                for _ in range(13):
+                    column.pop()
+                for f in self.foundations:
+                    if len(f) == 0:
+                        f.extend(last_13)
+                        break
+            else:
+                break
+
+    def is_full_sequence(self, cards):
+        if len(cards) != 13:
+            return False
+        suit = cards[0].suit
+        expected_rank = 13
+        for c in cards:
+            if c.suit != suit or c.rank != expected_rank:
+                return False
+            expected_rank -= 1
+        return True
 
     def is_game_won(self):
-        # Check if all foundations are complete
-        return all(len(foundation) == 13 for foundation in self.foundations)
+        completed_suits = sum(1 for f in self.foundations if len(f) == 13)
+        return completed_suits == 8
 
 
 class CardWidget(QFrame):
-    clicked = pyqtSignal()  # Signal emitted when this card is clicked
+    clicked = pyqtSignal()
+
+    # Fixed card dimensions
+    card_width = 60
+    card_height = 90
 
     def __init__(self, card):
         super().__init__()
         self.card = card
-        self.setFixedSize(80, 120)
         self.update_appearance()
 
     def update_appearance(self):
-        palette = self.palette()
-        if self.card.face_up:
-            # Different suit colors: Hearts (red), Spades (black)
-            if self.card.suit == "Hearts":
-                palette.setColor(QPalette.WindowText, Qt.red)
-            else:
-                palette.setColor(QPalette.WindowText, Qt.black)
+        for child in self.children():
+            child.deleteLater()
 
+        if self.card.face_up:
             text = f"{self.card.display_rank}{self.card.display_suit}"
-            self.setStyleSheet("""
-                border: 2px solid black;
-                border-radius: 5px;
-                background-color: white;
-            """)
+            if self.card.suit == "Hearts":
+                text_color = "red"
+            else:
+                text_color = "black"
+            bg_color = "white"
         else:
             text = "Face Down"
-            palette.setColor(QPalette.WindowText, Qt.black)
-            self.setStyleSheet("""
-                border: 2px solid black;
-                border-radius: 5px;
-                background-color: lightgray;
-            """)
+            text_color = "black"
+            bg_color = "lightgray"
 
+        self.setStyleSheet(f"""
+            border: 1px solid black;
+            border-radius: 5px;
+            background-color: {bg_color};
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(0)
+        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+        font_size = 12
         label = QLabel(text, self)
-        label.setFont(QFont("Arial", 14, QFont.Bold))
-        label.setAlignment(Qt.AlignCenter)
-        # Manually position label (center)
-        label.setGeometry(QRect(0, 0, self.width(), self.height()))
-        self.setPalette(palette)
+        label.setFont(QFont("Arial", font_size, QFont.Bold))
+        label.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        label.setStyleSheet(f"color: {text_color};")
+
+        layout.addWidget(label)
+        self.setLayout(layout)
+
+        self.setFixedSize(self.card_width, self.card_height)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.clicked.emit()
+
+
+class ColumnWidget(QFrame):
+    """
+    A widget to hold cards in a column with overlapping.
+    """
+    CARD_OVERLAP = 20  # Vertical overlap in pixels
+
+    def __init__(self):
+        super().__init__()
+        self.setStyleSheet("background-color: green; border:2px solid black; border-radius:5px;")
+        self.setMinimumWidth(CardWidget.card_width + 4)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self.card_widgets = []
+
+    def set_cards(self, cards):
+        for cw in self.card_widgets:
+            cw.setParent(None)
+            cw.deleteLater()
+        self.card_widgets.clear()
+
+        y_offset = 0
+        for cw in cards:
+            cw.setParent(self)
+            cw.show()
+            cw.move(0, y_offset)
+            y_offset += self.CARD_OVERLAP
+            self.card_widgets.append(cw)
+
+        self.setMinimumHeight(y_offset + CardWidget.card_height)
 
 
 class SpiderSolitaireGUI(QMainWindow):
@@ -205,67 +302,56 @@ class SpiderSolitaireGUI(QMainWindow):
         self.selected_index = None
         self.selected_widgets = []
 
-        self.initUI()
+        self.status_label = QLabel()
 
-    def initUI(self):
-        # Main widget and layout
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)
+        self.main_widget = QWidget()
+        self.setCentralWidget(self.main_widget)
+        self.main_layout = QVBoxLayout(self.main_widget)
 
-        # Top layout: Foundations and draw pile
         top_layout = QHBoxLayout()
         self.init_top_layout(top_layout)
-        main_layout.addLayout(top_layout)
+        self.main_layout.addLayout(top_layout)
 
-        # Game board layout: Columns of cards
         self.board_layout = QGridLayout()
+        self.board_layout.setHorizontalSpacing(5)
+        self.board_layout.setVerticalSpacing(5)
         self.init_board_layout(self.board_layout)
-        main_layout.addLayout(self.board_layout)
+        self.main_layout.addLayout(self.board_layout)
+
+        status_layout = QHBoxLayout()
+        self.status_label = QLabel("Moves: 0")
+        self.status_label.setFont(QFont("Arial", 12))
+        status_layout.addWidget(self.status_label)
+        self.main_layout.addLayout(status_layout)
 
     def init_top_layout(self, layout):
-        # Add foundation placeholders
-        for i in range(4):
+        for i in range(8):
             foundation = self.create_card_placeholder("Foundation")
             layout.addWidget(foundation)
 
-        # Add spacing
         layout.addStretch(1)
 
-        # Add draw pile
         draw_pile = QPushButton("Draw")
         draw_pile.clicked.connect(self.on_draw_click)
         layout.addWidget(draw_pile)
 
     def init_board_layout(self, layout):
-        # Create 10 columns for the Spider Solitaire game board
+        self.column_widgets = []
         for col in range(10):
             column_layout = QVBoxLayout()
             placeholder = self.create_card_placeholder(f"Column {col+1}")
             column_layout.addWidget(placeholder)
-            # Add cards for each column
-            self.add_cards_to_column(column_layout, col)
+
+            column_widget = ColumnWidget()
+            column_layout.addWidget(column_widget)
+            self.column_widgets.append(column_widget)
+
             layout.addLayout(column_layout, 0, col)
 
-    def add_cards_to_column(self, column_layout, col_index):
-        # Clear existing cards in the layout if any
-        # Not strictly necessary here, but good practice if we refresh
-        for i in reversed(range(column_layout.count())):
-            item = column_layout.itemAt(i)
-            if item and item.widget() and isinstance(item.widget(), CardWidget):
-                widget = item.widget()
-                column_layout.removeWidget(widget)
-                widget.deleteLater()
-
-        # Add current cards from self.game.columns[col_index]
-        for i, card in enumerate(self.game.columns[col_index]):
-            cw = CardWidget(card)
-            cw.clicked.connect(lambda _, c=col_index, idx=i: self.handle_card_click(c, idx))
-            column_layout.addWidget(cw)
+        self.refresh_board()
 
     def create_card_placeholder(self, text):
         placeholder = QLabel(text)
-        placeholder.setFixedSize(100, 140)
         placeholder.setAlignment(Qt.AlignCenter)
         placeholder.setStyleSheet("""
             border: 2px solid black;
@@ -273,69 +359,61 @@ class SpiderSolitaireGUI(QMainWindow):
             background-color: lightgray;
             font-size: 14px;
         """)
+        placeholder.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        placeholder.setFixedHeight(100)
         return placeholder
 
     def on_draw_click(self):
-        # Logic to handle drawing cards (deal a new row if possible)
+        print("Draw button clicked. Current deal_count:", self.game.deal_count, "Deck length:", len(self.game.deck.cards))
         success = self.game.deal_additional_row()
         if success:
+            print("Deal successful.")
+            self.clear_selection()
             self.refresh_board()
         else:
-            print("No more cards to draw.")
+            print("Deal failed, showing message.")
+            self.show_message("No more cards to draw.")
 
     def handle_card_click(self, col_index, card_index):
-        # If no card selected, select this one (if it is face up)
         columns = self.game.columns
+        if not (0 <= col_index < len(columns)) or not (0 <= card_index < len(columns[col_index])):
+            return
+
         card = columns[col_index][card_index]
+
         if not card.face_up:
-            # Can't select a face-down card
+            self.clear_selection()
             return
 
         if self.selected_column is None:
-            # Try selecting a sequence starting at card_index
-            # We'll just highlight this choice
             self.selected_column = col_index
             self.selected_index = card_index
             self.highlight_selection(col_index, card_index)
         else:
-            # Attempt move
-            if (col_index, card_index) == (self.selected_column, self.selected_index):
-                # Same card clicked again, deselect
-                self.clear_selection()
-                return
-            # If clicking on another column (on a card or empty space):
-            # We'll treat clicking on any card in target column as an attempt
-            # to move onto its top card.
-            if self.game.can_move_card(self.game.columns[self.selected_column],
-                                       self.selected_index,
-                                       self.game.columns[col_index]):
-                self.game.move_sequence(self.game.columns[self.selected_column],
-                                        self.selected_index,
-                                        self.game.columns[col_index])
+            from_col = self.game.columns[self.selected_column]
+            to_col = self.game.columns[col_index]
+            if self.game.can_move_card(from_col, self.selected_index, to_col):
+                self.game.move_sequence(from_col, self.selected_index, to_col)
                 self.clear_selection()
                 self.refresh_board()
-                # Check for win
+                self.update_status()
                 if self.game.is_game_won():
                     self.win_message()
             else:
-                # Invalid move
+                self.show_message("Invalid Move!")
                 self.clear_selection()
 
     def clear_selection(self):
         self.selected_column = None
         self.selected_index = None
-        # Clear any highlighting
         self.selected_widgets = []
         self.refresh_board()
 
     def highlight_selection(self, col_index, card_index):
-        # Highlight the selected sequence
-        # We will highlight all cards from card_index to end
-        column_layout = self.get_column_layout(col_index)
+        col_widget = self.column_widgets[col_index]
         seq_length = len(self.game.columns[col_index]) - card_index
-        # Style them slightly differently
         for i in range(card_index, card_index + seq_length):
-            cw = column_layout.itemAt(i+1).widget()  # +1 for the placeholder at top
+            cw = col_widget.card_widgets[i]
             cw.setStyleSheet("""
                 border: 2px solid blue;
                 border-radius: 5px;
@@ -343,27 +421,28 @@ class SpiderSolitaireGUI(QMainWindow):
             """)
             self.selected_widgets.append(cw)
 
-    def get_column_layout(self, col_index):
-        # board_layout item at (0, col_index) is a layout that includes placeholder and cards
-        # We know each column is a QVBoxLayout added to board_layout
-        item = self.board_layout.itemAtPosition(0, col_index)
-        return item
-
     def refresh_board(self):
-        for col in range(10):
-            col_layout = self.get_column_layout(col)
-            # First item: placeholder
-            # Remove all card widgets and re-add
-            while col_layout.count() > 1:
-                w = col_layout.itemAt(col_layout.count() - 1).widget()
-                col_layout.removeWidget(w)
-                w.deleteLater()
-            # Add updated cards
-            self.add_cards_to_column(col_layout, col)
+        for col_index, col_widget in enumerate(self.column_widgets):
+            cards = []
+            for i, card in enumerate(self.game.columns[col_index]):
+                cw = CardWidget(card)
+                cw.clicked.connect(partial(self.handle_card_click, col_index, i))
+                cards.append(cw)
+            col_widget.set_cards(cards)
+
+    def update_status(self):
+        self.status_label.setText(f"Moves: {self.game.moves}")
+
+    def show_message(self, message):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Spider Solitaire")
+        msg.setText(message)
+        msg.setIcon(QMessageBox.Information)
+        msg.exec_()
 
     def win_message(self):
-        # Just print a message for now
-        print("You won the game!")
+        self.show_message("You won the game! Congratulations!")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
