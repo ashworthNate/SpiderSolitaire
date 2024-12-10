@@ -15,6 +15,7 @@ Spider_solitaire
 Curent Bugs:
     - Can grab cards from bellow the top card or decending suits
     - Draw Button doesn't work, always returns that there is no more moves left
+    - Cant move cards to an empty row
 
 Wish List:
     - Cleaner GUI (To-Do: remove face down text and change the culumn color to something other than green. Maybe add a colored background.)
