@@ -3,23 +3,22 @@ Tristen, Nathan
 Spider_solitaire
 12-03-24 - Created File/Started Basic Structure
 12-05-24 - (Nathan) Started Work on GUI
-12-09-24 - (Nathan) Implemented card display, interactions, and basic move logic.
 12-09-24 - (Nathan) 
-    * Followed exact Spider Solitaire rules for two suits.
-    * Implemented full suit detection and automatic move to foundations.
-    * Displayed invalid move messages.
-    * Improved draw logic and proper face-up dealing.
-    * Fixed layout retrieval and indexing issues.
-    * Added checks and debug prints to help diagnose unexpected window closures.
-    * Removed fixed sizes and implemented dynamic scaling of card sizes based on window size.
-    * Adjusted layouts so that all columns fit within the window and cards resize on window changes.
-    * Fixed AttributeError by using QSizePolicy for expanding placeholders.
-    * Implemented five guaranteed deals for the draw pile as per Spider rules.
-    * Allowed mixed-suit building in the tableau but only same-suit descending sequences can be moved.
-    * Implemented overlapping stacks and fixed card size.
-    * Attempted debugging draw function.
-    * Removed deck length checks in deal_additional_row(), relying solely on deal_count < 5.
-    * Added additional debug prints to verify correct dealing.
+    * Implemented standard Spider Solitaire rules for two suits.
+    * Dealt the initial ten piles with proper face-down and face-up distribution.
+    * Adjusted move logic so that any card or movable sequence can be moved onto an empty column.
+    * Enforced that no new deal can occur if there are empty columns (except for the initial state).
+    * Implemented proper dealing of additional rows from the stock, including the final partial deal.
+    * Updated the display so that face-down cards appear above face-up cards with different overlaps.
+
+
+Curent Bugs:
+    - Can grab cards from bellow the top card or decending suits
+    - Draw Button doesn't work, always returns that there is no more moves left
+
+Wish List:
+    - Cleaner GUI (To-Do: remove face down text and change the culumn color to something other than green. Maybe add a colored background.)
+    - Auto Move (Ie, simply pressing on a card will move it to a any posibly move location, instead of the curerent click then choose method)
 """
 
 import sys
@@ -39,7 +38,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QPalette
+from PyQt5.QtGui import QFont
 
 
 class Card:
@@ -70,7 +69,7 @@ class Card:
 
 
 class Deck:
-    """Class to create card decks"""
+    """Class to create card decks (2 decks of 52 cards, total 104)"""
     def __init__(self):
         self.cards = []
         suits = ["Spades", "Hearts"]
@@ -96,43 +95,53 @@ class SpiderSolitaire:
     """Class for the game logic of Spider Solitaire (Two Suit Version)"""
     def __init__(self):
         self.deck = Deck()
-        # Initial deal (54 cards)
-        self.columns = [self.deck.deal(6) for _ in range(4)] + [self.deck.deal(5) for _ in range(6)]
-        for col in self.columns:
-            if col:
-                col[-1].face_up = True
+        # Initial deal: Ten piles of five cards each
+        # For each pile: first four face down, fifth card face up
+        self.columns = []
+        for _ in range(10):
+            pile = self.deck.deal(5)
+            for c in pile[:4]:
+                c.face_up = False
+            pile[-1].face_up = True
+            self.columns.append(pile)
 
         self.foundations = [[] for _ in range(8)]
         self.moves = 0
-        self.deal_count = 0  # track how many times we've dealt an additional row
-
-        # Debug initial conditions
-        total_dealt = sum(len(col) for col in self.columns)
-        print("Initial cards dealt:", total_dealt)
-        print("Expected initial deal: 54 cards. Actual:", total_dealt)
-        print("Deck length after initial deal:", len(self.deck.cards))  # Should be 50
+        self.deal_count = 0  # Track how many times we've dealt rows from the stock
 
     def deal_additional_row(self):
-        print(f"Attempting to deal row #{self.deal_count+1}")
-        if self.deal_count >= 5:
-            print("deal_additional_row: Already dealt 5 times.")
+        # Before dealing, no empty column should exist.
+        if self.has_empty_column():
             return False
 
-        # According to standard Spider rules, we should always have enough cards (50 left initially for 5 deals)
-        if len(self.deck.cards) < 10:
-            # This should never happen if initial conditions are correct
-            print("deal_additional_row: Not enough cards in deck. Something is wrong.")
+        if len(self.deck.cards) == 0:
             return False
 
-        print("Deck length before dealing this row:", len(self.deck.cards))
-        new_cards = self.deck.deal(10)
-        for i, col in enumerate(self.columns):
-            new_cards[i].face_up = True
-            col.append(new_cards[i])
+        if len(self.deck.cards) >= 10:
+            # Deal 10 cards face up
+            new_cards = self.deck.deal(10)
+            for c in new_cards:
+                c.face_up = True
+            for i, col in enumerate(self.columns):
+                col.append(new_cards[i])
+            self.deal_count += 1
+            return True
+        else:
+            # If less than 10 but at least 4 cards remain, deal 4 cards to first four piles
+            if len(self.deck.cards) >= 4:
+                new_cards = self.deck.deal(4)
+                for c in new_cards:
+                    c.face_up = True
+                for i in range(4):
+                    self.columns[i].append(new_cards[i])
+                self.deal_count += 1
+                return True
 
-        self.deal_count += 1
-        print(f"Dealt row #{self.deal_count}. Deck length now:", len(self.deck.cards))
-        return True
+            # If fewer than 4 remain, no deal possible
+            return False
+
+    def has_empty_column(self):
+        return any(len(col) == 0 for col in self.columns)
 
     def can_move_card(self, from_col, card_index, to_col):
         movable_sequence = self.get_movable_sequence(from_col, card_index)
@@ -140,9 +149,11 @@ class SpiderSolitaire:
             return False
 
         top_moved_card = movable_sequence[0]
+        # According to the new requirement: If column is empty, any card or sequence can be placed there.
         if not to_col:
-            return top_moved_card.rank == 13
+            return True
         else:
+            # If not empty, must follow standard rank rule (top_moved_card one less than destination top)
             top_dest_card = to_col[-1]
             return top_moved_card.rank == top_dest_card.rank - 1
 
@@ -178,6 +189,7 @@ class SpiderSolitaire:
         self.check_for_complete_suits(to_col)
 
     def check_for_complete_suits(self, column):
+        # If a complete suit (A to K) is formed, remove it to foundations.
         while len(column) >= 13:
             last_13 = column[-13:]
             if self.is_full_sequence(last_13):
@@ -209,7 +221,6 @@ class SpiderSolitaire:
 class CardWidget(QFrame):
     clicked = pyqtSignal()
 
-    # Fixed card dimensions
     card_width = 60
     card_height = 90
 
@@ -262,10 +273,8 @@ class CardWidget(QFrame):
 
 
 class ColumnWidget(QFrame):
-    """
-    A widget to hold cards in a column with overlapping.
-    """
-    CARD_OVERLAP = 20  # Vertical overlap in pixels
+    FACE_DOWN_OVERLAP = 10
+    FACE_UP_OVERLAP = 20
 
     def __init__(self):
         super().__init__()
@@ -280,12 +289,33 @@ class ColumnWidget(QFrame):
             cw.deleteLater()
         self.card_widgets.clear()
 
+        # Find first face-up card from bottom
+        face_up_start_index = None
+        for i, cw in enumerate(cards):
+            if cw.card.face_up:
+                face_up_start_index = i
+                break
+
+        if face_up_start_index is None:
+            face_up_start_index = len(cards)  # no face-up cards
+
         y_offset = 0
-        for cw in cards:
+        # Place face-down cards
+        for i in range(face_up_start_index):
+            cw = cards[i]
             cw.setParent(self)
             cw.show()
             cw.move(0, y_offset)
-            y_offset += self.CARD_OVERLAP
+            y_offset += self.FACE_DOWN_OVERLAP
+            self.card_widgets.append(cw)
+
+        # Place face-up cards
+        for i in range(face_up_start_index, len(cards)):
+            cw = cards[i]
+            cw.setParent(self)
+            cw.show()
+            cw.move(0, y_offset)
+            y_offset += self.FACE_UP_OVERLAP
             self.card_widgets.append(cw)
 
         self.setMinimumHeight(y_offset + CardWidget.card_height)
@@ -364,14 +394,17 @@ class SpiderSolitaireGUI(QMainWindow):
         return placeholder
 
     def on_draw_click(self):
-        print("Draw button clicked. Current deal_count:", self.game.deal_count, "Deck length:", len(self.game.deck.cards))
+        # Before dealing, no empty column should exist to deal new cards.
+        # This rule remains as per standard Spider, but we allow moving any card to empty column before that.
+        if self.game.has_empty_column():
+            self.show_message("Cannot deal: fill all empty spaces first.")
+            return
+
         success = self.game.deal_additional_row()
         if success:
-            print("Deal successful.")
             self.clear_selection()
             self.refresh_board()
         else:
-            print("Deal failed, showing message.")
             self.show_message("No more cards to draw.")
 
     def handle_card_click(self, col_index, card_index):
@@ -410,22 +443,25 @@ class SpiderSolitaireGUI(QMainWindow):
         self.refresh_board()
 
     def highlight_selection(self, col_index, card_index):
+        col_data = self.game.columns[col_index]
+        seq_length = len(col_data) - card_index
         col_widget = self.column_widgets[col_index]
-        seq_length = len(self.game.columns[col_index]) - card_index
         for i in range(card_index, card_index + seq_length):
-            cw = col_widget.card_widgets[i]
-            cw.setStyleSheet("""
-                border: 2px solid blue;
-                border-radius: 5px;
-                background-color: white;
-            """)
-            self.selected_widgets.append(cw)
+            if 0 <= i < len(col_widget.card_widgets):
+                cw = col_widget.card_widgets[i]
+                cw.setStyleSheet("""
+                    border: 2px solid blue;
+                    border-radius: 5px;
+                    background-color: white;
+                """)
+                self.selected_widgets.append(cw)
 
     def refresh_board(self):
         for col_index, col_widget in enumerate(self.column_widgets):
+            col_data = self.game.columns[col_index]
             cards = []
-            for i, card in enumerate(self.game.columns[col_index]):
-                cw = CardWidget(card)
+            for i, card_obj in enumerate(col_data):
+                cw = CardWidget(card_obj)
                 cw.clicked.connect(partial(self.handle_card_click, col_index, i))
                 cards.append(cw)
             col_widget.set_cards(cards)
