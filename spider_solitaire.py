@@ -222,8 +222,8 @@ class SpiderSolitaire:
 class CardWidget(QFrame):
     clicked = pyqtSignal()
 
-    card_width = 60
-    card_height = 90
+    card_width = 100  # Increased width
+    card_height = 150  # Increased height
 
     def __init__(self, card):
         super().__init__()
@@ -257,7 +257,7 @@ class CardWidget(QFrame):
         layout.setSpacing(0)
         layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
-        font_size = 12
+        font_size = 20  # Increased font size
         label = QLabel(text, self)
         label.setFont(QFont("Arial", font_size, QFont.Bold))
         label.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
@@ -267,6 +267,7 @@ class CardWidget(QFrame):
         self.setLayout(layout)
 
         self.setFixedSize(self.card_width, self.card_height)
+
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
