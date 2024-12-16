@@ -45,101 +45,131 @@ class Card:
 
 
 class Deck:
-    """Class to create card decks (2 decks of 52 cards, total 104)"""
+    """Class to represent a deck of cards with only Spades and Hearts."""
+    
     def __init__(self):
+        # Define the two suits: Spades and Hearts
+        suits = ['Spades', 'Hearts','Spades', 'Hearts']
+        ranks = list(range(1, 14))  # 1 = Ace, 11 = Jack, 12 = Queen, 13 = King
+        
+        # Create 104 cards: two decks of Spades and Hearts (52 cards x 2)
         self.cards = []
-        suits = ["Spades", "Hearts"]
-        ranks = list(range(1, 14))
-        for _ in range(2):
+        for _ in range(2):  # Two decks
             for suit in suits:
                 for rank in ranks:
                     self.cards.append(Card(rank, suit))
+
         self.shuffle()
 
     def shuffle(self):
+        """Shuffles the deck."""
         random.shuffle(self.cards)
 
     def deal(self, num_cards):
+        """Deals the specified number of cards from the deck."""
         if num_cards > len(self.cards):
-            num_cards = len(self.cards)
+            raise ValueError(f"Cannot deal {num_cards} cards; only {len(self.cards)} cards remaining.")
         dealt_cards = self.cards[:num_cards]
         self.cards = self.cards[num_cards:]
         return dealt_cards
+
+
 
 
 class SpiderSolitaire:
     """Class for the game logic of Spider Solitaire (Two Suit Version)"""
     def __init__(self):
         self.deck = Deck()
-        # Initial deal: Ten piles of five cards each
+
+        # Debug: Print deck size after initialization
+        print(f"Deck initialized with {len(self.deck.cards)} cards.")  # Should print 104 cards
+
+        # Initial deal: 6 piles with 5 cards, 4 piles with 6 cards
         self.columns = []
-        for _ in range(10):
-            pile = self.deck.deal(5)
-            for c in pile[:4]:
+        for i in range(10):
+            if i < 6:
+                # First 6 columns: deal 5 cards
+                pile = self.deck.deal(5)
+            else:
+                # Next 4 columns: deal 6 cards
+                pile = self.deck.deal(6)
+            
+            for c in pile[:len(pile) - 1]:  # All but the last card should be face down
                 c.face_up = False
-            pile[-1].face_up = True
+            pile[-1].face_up = True  # Last card should be face up
             self.columns.append(pile)
 
         self.foundations = [[] for _ in range(8)]
         self.moves = 0
-        self.deal_count = 0  # Track how many times we've dealt rows from the stock
+        self.deal_count = 0  # Track how many times rows have been dealt from the stock
+
+        # Validate the remaining cards in the deck
+        remaining_cards = len(self.deck.cards)
+        print(f"Remaining cards after initial deal: {remaining_cards}")  # Debug the remaining cards after dealing
+
+        expected_draw_cards = 50  # 5 additional rows * 10 cards each
+        if remaining_cards < expected_draw_cards:
+            print(f"Warning: Expected at least {expected_draw_cards} cards for draws, but found {remaining_cards}.")
+            self.max_draws = remaining_cards // 10
+        else:
+            self.max_draws = 5
+
 
     def deal_additional_row(self):
-        if self.has_empty_column():
-            return False
-
-        if len(self.deck.cards) == 0:
+        if self.deal_count >= self.max_draws:
             return False
 
         if len(self.deck.cards) >= 10:
+        # Draw 10 cards and add 1 card to each column
             new_cards = self.deck.deal(10)
-            for c in new_cards:
-                c.face_up = True
             for i, col in enumerate(self.columns):
-                col.append(new_cards[i])
+            # Only add a new card if the column is not empty
+                if col:
+                    col.append(new_cards[i])
+                    col[-1].face_up = True  # Ensure the card is face up
             self.deal_count += 1
             return True
         else:
-            if len(self.deck.cards) >= 4:
-                new_cards = self.deck.deal(4)
-                for c in new_cards:
-                    c.face_up = True
-                for i in range(4):
-                    self.columns[i].append(new_cards[i])
-                self.deal_count += 1
-                return True
-            return False
+            print(f"Not enough cards to draw. Remaining cards: {len(self.deck.cards)}")  # Debug remaining cards
+        return False
 
-    def has_empty_column(self):
-        return any(len(col) == 0 for col in self.columns)
+
+
+
 
     def can_move_card(self, from_col, card_index, to_col):
+    # If the destination column is empty and the card being moved is a King, allow the move
+        if not to_col and from_col[card_index].rank == 13:
+            return True
+
         movable_sequence = self.get_movable_sequence(from_col, card_index)
         if not movable_sequence:
             return False
 
         top_moved_card = movable_sequence[0]
         if not to_col:
-            return True
+           return False
         else:
             top_dest_card = to_col[-1]
             return top_moved_card.rank == top_dest_card.rank - 1
 
+
     def get_movable_sequence(self, col, start_index):
+        """Retrieve a valid sequence of cards that can be moved from a column."""
         if start_index < 0 or start_index >= len(col):
             return []
-        seq = [col[start_index]]
         if not col[start_index].face_up:
-            return []
+            return []  # Can't move face-down cards
 
-        for i in range(start_index+1, len(col)):
-            prev_card = seq[-1]
-            curr_card = col[i]
-            if curr_card.face_up and curr_card.suit == prev_card.suit and curr_card.rank == prev_card.rank - 1:
-                seq.append(curr_card)
-            else:
-                break
-        return seq
+        sequence = col[start_index:]
+        for i in range(len(sequence) - 1):
+            if (
+                sequence[i].suit != sequence[i + 1].suit
+                or sequence[i].rank != sequence[i + 1].rank + 1
+            ):
+                return []  # Sequence breaks if not same suit or not descending order
+
+        return sequence
 
     def move_sequence(self, from_col, card_index, to_col):
         movable_sequence = self.get_movable_sequence(from_col, card_index)
@@ -330,93 +360,58 @@ class SpiderSolitaireGUI(QMainWindow):
             placeholder = self.create_card_placeholder(f"Column {col+1}")
             column_layout.addWidget(placeholder)
 
-            # Pass the column index and self (SpiderSolitaireGUI) to ColumnWidget
             column_widget = ColumnWidget(col, self)  # Pass self as the parent widget
             column_layout.addWidget(column_widget)
             self.column_widgets.append(column_widget)
 
             layout.addLayout(column_layout, 0, col)
 
-        self.refresh_board()
+        self.update_board()
 
     def create_card_placeholder(self, text):
-        placeholder = QLabel(text)
-        placeholder.setAlignment(Qt.AlignCenter)
-        placeholder.setStyleSheet("""
-            border: 2px solid black;
-            border-radius: 5px;
-            background-color: lightgray;
-            font-size: 14px;
-        """)
-        placeholder.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        placeholder.setFixedHeight(100)
+        placeholder = QFrame()
+        placeholder.setStyleSheet("background-color: lightgray; border: 1px solid black; border-radius: 5px;")
+        placeholder.setMinimumSize(100, 150)
         return placeholder
 
-    def on_draw_click(self):
-        if self.game.has_empty_column():
-            self.show_message("Cannot deal: fill all empty spaces first.")
-            return
+    def update_board(self):
+        for i, column in enumerate(self.game.columns):
+            self.column_widgets[i].set_cards(column)
 
-        success = self.game.deal_additional_row()
-        if success:
-            self.clear_selection()
-            self.refresh_board()
+    def on_draw_click(self):
+        if self.game.deal_additional_row():
+            self.update_board()
+            self.status_label.setText(f"Moves: {self.game.moves}")
         else:
-            self.show_message("No more cards to draw.")
+            self.status_label.setText("No more cards to draw!")
 
     def card_click(self, col_index, card_index):
-        columns = self.game.columns
-        if not (0 <= col_index < len(columns)):
-            return
+        selected_card = self.game.columns[col_index][card_index]
 
-        column = columns[col_index]
-        # If no card is selected yet
-        if self.selected_column is None:
-            if column[card_index].face_up:
-                self.selected_column = col_index
-                self.selected_index = card_index
-                self.selected_widgets = [self.column_widgets[col_index].card_widgets[card_index]]
-        else:
-            if self.selected_column == col_index:
-                # Move the card(s)
-                self.game.move_sequence(self.game.columns[self.selected_column], self.selected_index, column)
-                self.refresh_board()
-            else:
-                # Attempt to move to another column
-                if self.game.can_move_card(self.game.columns[self.selected_column], self.selected_index, column):
-                    self.game.move_sequence(self.game.columns[self.selected_column], self.selected_index, column)
-                    self.refresh_board()
-                else:
-                    self.show_message("Cannot make this move.")
+        if self.selected_column is not None:
+            from_col = self.game.columns[self.selected_column]
+            to_col = self.game.columns[col_index]
+            if self.game.can_move_card(from_col, self.selected_index, to_col):
+                self.game.move_sequence(from_col, self.selected_index, to_col)
+                self.selected_column = None
+                self.selected_index = None
+                self.selected_widgets = []
+                self.update_board()
+                self.status_label.setText(f"Moves: {self.game.moves}")
+                return
 
-            # Reset selection after move
-            self.clear_selection()
+        self.selected_column = col_index
+        self.selected_index = card_index
+        self.selected_widgets = self.column_widgets[col_index].card_widgets
 
-    def show_message(self, message):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information)
-        msg.setText(message)
-        msg.setWindowTitle("Info")
-        msg.exec_()
+        for i, widget in enumerate(self.selected_widgets):
+            widget.update_appearance()
 
-    def clear_selection(self):
-        self.selected_column = None
-        self.selected_index = None
-        self.selected_widgets = []
-
-    def refresh_board(self):
-        for i, column_widget in enumerate(self.column_widgets):
-            column_widget.set_cards(self.game.columns[i], self.selected_index)
-
-        self.update_status()
-
-    def update_status(self):
-        self.status_label.setText(f"Moves: {self.game.moves}")
+        self.update_board()
 
 
-# Ensure the script runs only when executed directly
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = SpiderSolitaireGUI()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
