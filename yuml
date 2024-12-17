@@ -1,16 +1,83 @@
-// {type:class}
-// {direction:topDown}
-// Class diagram of Spider Solitaire Game
-[Card] -<> [Deck]
-[Deck] -<> [SpiderSolitaire]
-[SpiderSolitaire] -<> [Card]
-[SpiderSolitaire] -<> [WildCard]
-[SpiderSolitaire] -<> [ColumnWidget]
-[SpiderSolitaire] -<> [CardWidget]
-[SpiderSolitaire] -<> [SpiderSolitaireGUI]
-[SpiderSolitaireGUI] -<> [ColumnWidget]
-[SpiderSolitaireGUI] -<> [CardWidget]
-[CardWidget] -<> [SpiderSolitaireGUI]
-[ColumnWidget] -<> [CardWidget]
-[ColumnWidget] -<> [SpiderSolitaireGUI]
-[Card] ^ [WildCard]
+SpiderSolitaire:
+  description: |
+    Spider Solitaire is a two-suit variation of the traditional game of solitaire.
+    The game is played with two decks of cards (Spades and Hearts) and follows the basic
+    Spider Solitaire rules for two suits.
+  classes:
+    - Card:
+        description: "Represents a card in the game."
+        properties:
+          - rank: "The rank of the card (1-13)."
+          - suit: "The suit of the card (Spades or Hearts)."
+          - face_up: "Indicates whether the card is face-up or face-down."
+        methods:
+          - flip: "Flips the card (face-up to face-down or vice versa)."
+          - display_rank: "Displays the rank of the card as a string (A, 2-10, J, Q, K)."
+          - display_suit: "Displays the suit of the card as a symbol (♠ or ♥)."
+    - WildCard:
+        description: "A placeholder card for empty columns."
+        parent_class: Card
+    - Deck:
+        description: "Represents a deck of cards (only Spades and Hearts)."
+        properties:
+          - cards: "List of cards in the deck."
+        methods:
+          - shuffle: "Shuffles the deck."
+          - deal: "Deals a specified number of cards from the deck."
+    - SpiderSolitaire:
+        description: "Game logic for Spider Solitaire."
+        properties:
+          - deck: "Deck of cards used in the game."
+          - columns: "List of columns, each containing a pile of cards."
+          - foundations: "List of foundations where complete sequences are moved."
+          - moves: "Number of moves made in the game."
+          - deal_count: "Number of additional rows drawn."
+          - max_draws: "Maximum number of additional rows that can be drawn."
+          - move_history: "History of moves for undo functionality."
+        methods:
+          - add_wildcard_to_empty_columns: "Adds wildcards to any empty columns."
+          - has_wildcard: "Checks if any column contains a wildcard."
+          - deal_additional_row: "Deals an additional row of cards to the columns."
+          - can_move_card: "Checks if a card can be moved to a target column."
+          - get_movable_sequence: "Returns a sequence of cards that can be moved."
+          - move_sequence: "Moves a sequence of cards from one column to another."
+          - undo_last_move: "Undoes the last move made."
+          - check_for_complete_suits: "Checks if a column contains a complete sequence of cards."
+          - is_full_sequence: "Checks if a sequence of 13 cards is a valid suit sequence."
+    - SpiderSolitaireGUI:
+        description: "Graphical user interface for Spider Solitaire using PySide6."
+        properties:
+          - game: "Instance of the SpiderSolitaire game logic."
+          - selected_column: "The column currently selected by the user."
+          - selected_index: "The card index currently selected by the user."
+          - main_widget: "Main widget holding the game layout."
+          - main_layout: "Layout for the main game window."
+          - board_layout: "Layout for the card columns."
+          - foundation_widgets: "Widgets displaying the foundations."
+          - column_widgets: "Widgets displaying the columns."
+        methods:
+          - card_click: "Handles card click events to select, move, or deselect cards."
+          - init_top_layout: "Initializes the top layout with undo, restart, and draw buttons."
+          - init_board_layout: "Initializes the layout for the card columns."
+          - update_board: "Updates the display of cards and foundations."
+          - on_undo_click: "Handles the undo button click event."
+          - on_restart_click: "Handles the restart button click event."
+          - on_draw_click: "Handles the draw button click event."
+    - ColumnWidget:
+        description: "Represents a column of cards in the game."
+        properties:
+          - column_index: "Index of the column in the game."
+          - parent_widget: "Reference to the parent GUI window."
+          - card_widgets: "List of card widgets displayed in this column."
+        methods:
+          - set_cards: "Displays the cards in the column with optional highlighting."
+    - CardWidget:
+        description: "Represents a card widget in the UI."
+        properties:
+          - card: "The Card instance being displayed."
+          - col_index: "Column index in which the card is located."
+          - card_index: "Index of the card within its column."
+          - is_selected: "Indicates whether the card is currently selected."
+        methods:
+          - update_appearance: "Updates the card's visual appearance based on its state."
+          - mousePressEvent: "Handles mouse press events to trigger card selection."
