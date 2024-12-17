@@ -1,3 +1,30 @@
+"""
+Tristen, Nathan
+Spider_solitaire
+12-03-24 - Created File/Started Basic Structure
+12-05-24 - (Nathan) Started Work on GUI
+12-09-24 - (Nathan) 
+    * Implemented standard Spider Solitaire rules for two suits.
+    * Dealt the initial ten piles with proper face-down and face-up distribution.
+    * Adjusted move logic so that any card or movable sequence can be moved onto an empty column.
+    * Enforced that no new deal can occur if there are empty columns (except for the initial state).
+    * Implemented proper dealing of additional rows from the stock, including the final partial deal.
+    * Updated the display so that face-down cards appear above face-up cards with different overlaps.
+12-15-24 - (Nathan)
+    * Fixed Bugs to do with completed suits not moving to the foundation
+    * Fixed empty column bug where empty columns weren't playable
+12-16-24 - (Nathan)
+    * Created more tests
+
+
+Curent Bugs:
+    * Undo doesn't hide flipped cards
+
+Wish List:
+    - Cleaner GUI (To-Do: remove face down text and change the culumn color to something other than green. Maybe add a colored background.)
+    - Auto Move (Ie, simply pressing on a card will move it to a any posibly move location, instead of the curerent click then choose method)
+"""
+
 import sys
 import random
 from PySide6.QtWidgets import (
