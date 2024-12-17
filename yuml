@@ -1,0 +1,16 @@
+// {type:class}
+// {direction:topDown}
+// Class diagram of Spider Solitaire Game
+[Card] -<> [Deck]
+[Deck] -<> [SpiderSolitaire]
+[SpiderSolitaire] -<> [Card]
+[SpiderSolitaire] -<> [WildCard]
+[SpiderSolitaire] -<> [ColumnWidget]
+[SpiderSolitaire] -<> [CardWidget]
+[SpiderSolitaire] -<> [SpiderSolitaireGUI]
+[SpiderSolitaireGUI] -<> [ColumnWidget]
+[SpiderSolitaireGUI] -<> [CardWidget]
+[CardWidget] -<> [SpiderSolitaireGUI]
+[ColumnWidget] -<> [CardWidget]
+[ColumnWidget] -<> [SpiderSolitaireGUI]
+[Card] ^ [WildCard]
