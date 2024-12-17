@@ -48,11 +48,9 @@ class Deck:
     """Class to represent a deck of cards with only Spades and Hearts."""
     
     def __init__(self):
-        # Define the two suits: Spades and Hearts
         suits = ['Spades', 'Hearts','Spades', 'Hearts']
         ranks = list(range(1, 14))  # 1 = Ace, 11 = Jack, 12 = Queen, 13 = King
         
-        # Create 104 cards: two decks of Spades and Hearts (52 cards x 2)
         self.cards = []
         for _ in range(2):  # Two decks
             for suit in suits:
@@ -62,11 +60,9 @@ class Deck:
         self.shuffle()
 
     def shuffle(self):
-        """Shuffles the deck."""
         random.shuffle(self.cards)
 
     def deal(self, num_cards):
-        """Deals the specified number of cards from the deck."""
         if num_cards > len(self.cards):
             raise ValueError(f"Cannot deal {num_cards} cards; only {len(self.cards)} cards remaining.")
         dealt_cards = self.cards[:num_cards]
@@ -74,92 +70,60 @@ class Deck:
         return dealt_cards
 
 
-
-
 class SpiderSolitaire:
     """Class for the game logic of Spider Solitaire (Two Suit Version)"""
     def __init__(self):
         self.deck = Deck()
-
-        # Debug: Print deck size after initialization
-        print(f"Deck initialized with {len(self.deck.cards)} cards.")  # Should print 104 cards
-
-        # Initial deal: 6 piles with 5 cards, 4 piles with 6 cards
         self.columns = []
         for i in range(10):
             if i < 6:
-                # First 6 columns: deal 5 cards
                 pile = self.deck.deal(5)
             else:
-                # Next 4 columns: deal 6 cards
                 pile = self.deck.deal(6)
-            
-            for c in pile[:len(pile) - 1]:  # All but the last card should be face down
+            for c in pile[:-1]:
                 c.face_up = False
-            pile[-1].face_up = True  # Last card should be face up
+            pile[-1].face_up = True
             self.columns.append(pile)
 
         self.foundations = [[] for _ in range(8)]
         self.moves = 0
-        self.deal_count = 0  # Track how many times rows have been dealt from the stock
+        self.deal_count = 0
+        self.max_draws = 5
 
-        # Validate the remaining cards in the deck
-        remaining_cards = len(self.deck.cards)
-        print(f"Remaining cards after initial deal: {remaining_cards}")  # Debug the remaining cards after dealing
-
-        expected_draw_cards = 50  # 5 additional rows * 10 cards each
-        if remaining_cards < expected_draw_cards:
-            print(f"Warning: Expected at least {expected_draw_cards} cards for draws, but found {remaining_cards}.")
-            self.max_draws = remaining_cards // 10
-        else:
-            self.max_draws = 5
-
+        # Track move history for undo functionality
+        self.move_history = []
 
     def deal_additional_row(self):
         if self.deal_count >= self.max_draws:
             return False
 
-        if len(self.deck.cards) >= 10:
-        # Draw 10 cards and add 1 card to each column
-            new_cards = self.deck.deal(10)
-            for i, col in enumerate(self.columns):
-            # Only add a new card if the column is not empty
-                if col:
-                    col.append(new_cards[i])
-                    col[-1].face_up = True  # Ensure the card is face up
-            self.deal_count += 1
-            return True
-        else:
-            print(f"Not enough cards to draw. Remaining cards: {len(self.deck.cards)}")  # Debug remaining cards
-        return False
-
-
-
-
+        new_cards = self.deck.deal(10)
+        for i, col in enumerate(self.columns):
+            if col:
+                col.append(new_cards[i])
+                col[-1].face_up = True
+        self.deal_count += 1
+        self.move_history.append(('deal', new_cards))
+        return True
 
     def can_move_card(self, from_col, card_index, to_col):
-    # If the destination column is empty and the card being moved is a King, allow the move
-        if not to_col and from_col[card_index].rank == 13:
-            return True
+        # Allow moving any sequence of cards to an empty column
+        if not to_col:  # Destination column is empty
+            return True  # Any card or sequence can be moved to an empty column
 
+        # Standard move check for valid sequences
         movable_sequence = self.get_movable_sequence(from_col, card_index)
         if not movable_sequence:
             return False
 
-        top_moved_card = movable_sequence[0]
-        if not to_col:
-           return False
-        else:
-            top_dest_card = to_col[-1]
-            return top_moved_card.rank == top_dest_card.rank - 1
-
+        top_dest_card = to_col[-1]
+        return movable_sequence[0].rank == top_dest_card.rank - 1
 
     def get_movable_sequence(self, col, start_index):
-        """Retrieve a valid sequence of cards that can be moved from a column."""
         if start_index < 0 or start_index >= len(col):
             return []
         if not col[start_index].face_up:
-            return []  # Can't move face-down cards
+            return []
 
         sequence = col[start_index:]
         for i in range(len(sequence) - 1):
@@ -167,24 +131,54 @@ class SpiderSolitaire:
                 sequence[i].suit != sequence[i + 1].suit
                 or sequence[i].rank != sequence[i + 1].rank + 1
             ):
-                return []  # Sequence breaks if not same suit or not descending order
+                return []
 
         return sequence
 
     def move_sequence(self, from_col, card_index, to_col):
-        movable_sequence = self.get_movable_sequence(from_col, card_index)
-        if not movable_sequence:
+        # Allow moving any sequence or single card to an empty column
+        if not to_col:  # If target column is empty, move the entire sequence or a single card
+            movable_sequence = self.get_movable_sequence(from_col, card_index)
+            if not movable_sequence:  # If no valid sequence, allow a single card
+                movable_sequence = [from_col[card_index]]
+        else:  # For non-empty columns, validate the sequence
+            movable_sequence = self.get_movable_sequence(from_col, card_index)
+
+        if not movable_sequence:  # If no valid sequence, return early
             return
 
-        length = len(movable_sequence)
-        moving_cards = from_col[card_index:card_index+length]
-        del from_col[card_index:card_index+length]
+        # Record the move for undo functionality
+        self.move_history.append(('move', from_col, to_col, movable_sequence))
+
+        # Move cards from source column to target column
+        moving_cards = from_col[card_index:]
+        del from_col[card_index:]
         to_col.extend(moving_cards)
 
+        # Flip the last card in the source column if needed
         if from_col and not from_col[-1].face_up:
             from_col[-1].flip()
+
         self.moves += 1
         self.check_for_complete_suits(to_col)
+
+    def undo_last_move(self):
+        if not self.move_history:
+            return False
+
+        last_move = self.move_history.pop()
+
+        if last_move[0] == 'move':
+            _, from_col, to_col, moved_cards = last_move
+            del to_col[-len(moved_cards):]
+            from_col.extend(moved_cards)
+            if from_col and not from_col[-1].face_up:
+                from_col[-1].flip()
+        elif last_move[0] == 'deal':
+            _, dealt_cards = last_move
+            for col, card in zip(self.columns, dealt_cards):
+                col.pop()
+        return True
 
     def check_for_complete_suits(self, column):
         while len(column) >= 13:
@@ -209,10 +203,6 @@ class SpiderSolitaire:
                 return False
             expected_rank -= 1
         return True
-
-    def is_game_won(self):
-        completed_suits = sum(1 for f in self.foundations if len(f) == 13)
-        return completed_suits == 8
 
 
 class CardWidget(QFrame):
@@ -285,26 +275,35 @@ class ColumnWidget(QFrame):
         self.setStyleSheet("background-color: green; border:2px solid black; border-radius:5px;")
         self.setMinimumWidth(CardWidget.card_width + 4)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        self.column_index = column_index  # Store the column index here
+        self.column_index = column_index
+        self.parent_widget = parent_widget
         self.card_widgets = []
-        self.parent_widget = parent_widget  # Store the parent reference
 
     def set_cards(self, cards, selected_index=None):
+        # Clear previous card widgets
         for cw in self.card_widgets:
             cw.setParent(None)
             cw.deleteLater()
         self.card_widgets.clear()
 
         y_offset = 0
-        for i, cw in enumerate(cards):
-            is_selected = (i == selected_index)
-            card_widget = CardWidget(cw, self.column_index, i, is_selected)  # Pass column_index directly
-            card_widget.clicked.connect(self.parent_widget.card_click)  # Connect card click signal to parent method
-            card_widget.setParent(self)
-            card_widget.show()
-            card_widget.move(0, y_offset)
-            y_offset += self.FACE_UP_OVERLAP if cw.face_up else self.FACE_DOWN_OVERLAP
-            self.card_widgets.append(card_widget)
+        if cards:  # If the column is not empty
+            for i, card in enumerate(cards):
+                is_selected = (i == selected_index)
+                card_widget = CardWidget(card, self.column_index, i, is_selected)
+                card_widget.clicked.connect(self.parent_widget.card_click)
+                card_widget.setParent(self)
+                card_widget.show()
+                card_widget.move(0, y_offset)
+                y_offset += self.FACE_UP_OVERLAP if card.face_up else self.FACE_DOWN_OVERLAP
+                self.card_widgets.append(card_widget)
+        else:  # Empty column placeholder
+            placeholder = QFrame(self)
+            placeholder.setStyleSheet("background-color: lightgray; border: 1px dashed black;")
+            placeholder.setFixedSize(CardWidget.card_width, CardWidget.card_height)
+            placeholder.mousePressEvent = lambda e: self.parent_widget.card_click(self.column_index, -1)
+            placeholder.move(0, 0)
+            self.card_widgets.append(placeholder)
 
         self.setMinimumHeight(y_offset + CardWidget.card_height)
 
@@ -343,6 +342,14 @@ class SpiderSolitaireGUI(QMainWindow):
         self.main_layout.addLayout(status_layout)
 
     def init_top_layout(self, layout):
+        undo_button = QPushButton("Undo")
+        undo_button.clicked.connect(self.on_undo_click)
+        layout.addWidget(undo_button)
+
+        restart_button = QPushButton("Restart")
+        restart_button.clicked.connect(self.on_restart_click)
+        layout.addWidget(restart_button)
+
         for i in range(8):
             foundation = self.create_card_placeholder("Foundation")
             layout.addWidget(foundation)
@@ -385,30 +392,49 @@ class SpiderSolitaireGUI(QMainWindow):
         else:
             self.status_label.setText("No more cards to draw!")
 
+    def on_undo_click(self):
+        if self.game.undo_last_move():
+            self.update_board()
+            self.status_label.setText(f"Moves: {self.game.moves}")
+        else:
+            QMessageBox.information(self, "Spider Solitaire", "No moves to undo!")
+
+    def on_restart_click(self):
+        self.game = SpiderSolitaire()
+        self.selected_column = None
+        self.selected_index = None
+        self.selected_widgets = []
+        self.update_board()
+        self.status_label.setText("Moves: 0")
+
     def card_click(self, col_index, card_index):
-        selected_card = self.game.columns[col_index][card_index]
+        if col_index < 0 or col_index >= len(self.game.columns):
+            return
 
         if self.selected_column is not None:
+            # Attempt to move the selected card/sequence to the clicked column
             from_col = self.game.columns[self.selected_column]
             to_col = self.game.columns[col_index]
+
             if self.game.can_move_card(from_col, self.selected_index, to_col):
                 self.game.move_sequence(from_col, self.selected_index, to_col)
                 self.selected_column = None
                 self.selected_index = None
-                self.selected_widgets = []
                 self.update_board()
                 self.status_label.setText(f"Moves: {self.game.moves}")
-                return
+            else:
+                QMessageBox.information(self, "Invalid Move", "You can't move the selected cards here.")
+            return
 
-        self.selected_column = col_index
-        self.selected_index = card_index
-        self.selected_widgets = self.column_widgets[col_index].card_widgets
-
-        for i, widget in enumerate(self.selected_widgets):
-            widget.update_appearance()
+        # If no card is selected, handle selecting a card or empty column
+        if card_index == -1:  # Clicked on an empty column
+            self.selected_column = None
+            self.selected_index = None
+        else:  # Select a card
+            self.selected_column = col_index
+            self.selected_index = card_index
 
         self.update_board()
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
